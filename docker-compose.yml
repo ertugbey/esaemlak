@@ -1,0 +1,374 @@
+version: '3.8'
+
+services:
+  # Admin Panel (Next.js - Port 3000)
+  admin-panel:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - AUTH_SERVICE_URL=http://auth-service:8080
+      - LISTINGS_SERVICE_URL=http://listings-service:8080
+      - MESSAGES_SERVICE_URL=http://messaging-service:8080
+      - PAYMENTS_SERVICE_URL=http://payment-service:8080
+    depends_on:
+      - api-gateway
+    networks:
+      - emlaktan-network
+
+  # ==================== API GATEWAY ====================
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: ApiGateway/Dockerfile
+    ports:
+      - "5000:8080"
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - JwtSettings__Secret=YourSuperSecretKeyThatIsAtLeast32CharactersLongForHS256
+      - JwtSettings__Issuer=EmlaktanAuthService
+      - JwtSettings__Audience=EmlaktanApp
+      - Seq__ServerUrl=http://seq:5341
+      - Jaeger__AgentHost=jaeger
+      - Redis__ConnectionString=redis:6379,abortConnect=false
+      # YARP Cluster Destinations
+      - ReverseProxy__Clusters__auth-cluster__Destinations__auth-service__Address=http://auth-service:8080
+      - ReverseProxy__Clusters__listings-cluster__Destinations__listings-service__Address=http://listings-service:8080
+      - ReverseProxy__Clusters__notification-cluster__Destinations__notification-service__Address=http://notification-service:8080
+      - ReverseProxy__Clusters__messaging-cluster__Destinations__messaging-service__Address=http://messaging-service:8080
+      - ReverseProxy__Clusters__payment-cluster__Destinations__payment-service__Address=http://payment-service:8080
+    depends_on:
+      auth-service:
+        condition: service_started
+      listings-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      messaging-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - emlaktan-network
+
+  # ==================== MICROSERVICES ====================
+
+  # AuthService
+  auth-service:
+    build:
+      context: ./backend
+      dockerfile: AuthService/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - MongoDBSettings__ConnectionString=mongodb://mongodb:27017
+      - MongoDBSettings__DatabaseName=esaemlak_v2
+      - JwtSettings__Secret=YourSuperSecretKeyThatIsAtLeast32CharactersLongForHS256
+      - Seq__ServerUrl=http://seq:5341
+      - RabbitMQ__Host=rabbitmq
+      - Jaeger__AgentHost=jaeger
+      - Redis__ConnectionString=redis:6379,abortConnect=false
+    depends_on:
+      mongodb:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - emlaktan-network
+
+  # ListingsService
+  listings-service:
+    build:
+      context: ./backend
+      dockerfile: ListingsService/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - MongoDBSettings__ConnectionString=mongodb://mongodb:27017
+      - MongoDBSettings__DatabaseName=esaemlak_v2
+      - JwtSettings__Secret=YourSuperSecretKeyThatIsAtLeast32CharactersLongForHS256
+      - Seq__ServerUrl=http://seq:5341
+      - RabbitMQ__Host=rabbitmq
+      - Jaeger__AgentHost=jaeger
+      - Elasticsearch__Uri=http://elasticsearch:9200
+    depends_on:
+      mongodb:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      elasticsearch:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - emlaktan-network
+
+  # NotificationService (Event Consumer + SignalR)
+  notification-service:
+    build:
+      context: ./backend
+      dockerfile: NotificationService/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - Seq__ServerUrl=http://seq:5341
+      - RabbitMQ__Host=rabbitmq
+      - Jaeger__AgentHost=jaeger
+      - JwtSettings__Secret=YourSuperSecretKeyThatIsAtLeast32CharactersLongForHS256
+      - JwtSettings__Issuer=EmlaktanAuthService
+      - JwtSettings__Audience=EmlaktanApp
+      - Smtp__Host=mock
+      - Firebase__ServiceAccountKeyPath=
+    depends_on:
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - emlaktan-network
+
+  # MessagingService (SignalR)
+  messaging-service:
+    build:
+      context: ./backend
+      dockerfile: MessagingService/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - MongoDBSettings__ConnectionString=mongodb://mongodb:27017
+      - MongoDBSettings__DatabaseName=esaemlak_v2
+      - JwtSettings__Secret=YourSuperSecretKeyThatIsAtLeast32CharactersLongForHS256
+      - Seq__ServerUrl=http://seq:5341
+      - Jaeger__AgentHost=jaeger
+    depends_on:
+      mongodb:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - emlaktan-network
+
+  # PaymentService
+  payment-service:
+    build:
+      context: ./backend
+      dockerfile: PaymentService/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - MongoDBSettings__ConnectionString=mongodb://mongodb:27017
+      - MongoDBSettings__DatabaseName=esaemlak_v2
+      - JwtSettings__Secret=YourSuperSecretKeyThatIsAtLeast32CharactersLongForHS256
+      - Seq__ServerUrl=http://seq:5341
+      - RabbitMQ__Host=rabbitmq
+      - Jaeger__AgentHost=jaeger
+      - Iyzico__ApiKey=sandbox-api-key
+      - Iyzico__SecretKey=sandbox-secret-key
+      - Iyzico__BaseUrl=https://sandbox-api.iyzipay.com
+    depends_on:
+      mongodb:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - emlaktan-network
+
+  # ==================== INFRASTRUCTURE ====================
+
+  # MongoDB
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    volumes:
+      - mongodb-data:/data/db
+      - ./backend/mongo-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - emlaktan-network
+
+  # RabbitMQ (Event Bus)
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: unless-stopped
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - emlaktan-network
+
+  # Jaeger (Distributed Tracing)
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    ports:
+      - "6831:6831/udp"
+      - "16686:16686"
+    restart: unless-stopped
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - emlaktan-network
+
+  # Elasticsearch (Search)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9200/_cluster/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - emlaktan-network
+
+  # Seq (Centralized Logging)
+  seq:
+    image: datalust/seq:latest
+    ports:
+      - "5341:80"
+    restart: unless-stopped
+    environment:
+      - ACCEPT_EULA=Y
+    volumes:
+      - seq-data:/data
+    networks:
+      - emlaktan-network
+
+  # Redis (Token Blacklist + Cache)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - emlaktan-network
+
+  # ==================== MONITORING ====================
+
+  # Prometheus (Metrics Collection)
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+    depends_on:
+      - api-gateway
+    networks:
+      - emlaktan-network
+
+  # Grafana (Dashboard & Visualization)
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3002:3000"
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=esaemlak2024
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./infra/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - emlaktan-network
+
+networks:
+  emlaktan-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:
+  seq-data:
+  rabbitmq-data:
+  elasticsearch-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:

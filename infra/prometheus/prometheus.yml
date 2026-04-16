@@ -1,0 +1,85 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alert rules (optional, for future use)
+# rule_files:
+#   - "alert_rules.yml"
+
+scrape_configs:
+  # API Gateway — has Prometheus exporter at /metrics
+  - job_name: 'api-gateway'
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['api-gateway:8080']
+        labels:
+          service: api-gateway
+          tier: gateway
+
+  # AuthService — health endpoint for basic monitoring
+  - job_name: 'auth-service-health'
+    metrics_path: /health
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['auth-service:8080']
+        labels:
+          service: auth-service
+          tier: backend
+
+  # ListingsService — health endpoint
+  - job_name: 'listings-service-health'
+    metrics_path: /health
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['listings-service:8080']
+        labels:
+          service: listings-service
+          tier: backend
+
+  # PaymentService — health endpoint
+  - job_name: 'payment-service-health'
+    metrics_path: /health
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['payment-service:8080']
+        labels:
+          service: payment-service
+          tier: backend
+
+  # NotificationService — health endpoint
+  - job_name: 'notification-service-health'
+    metrics_path: /health
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['notification-service:8080']
+        labels:
+          service: notification-service
+          tier: backend
+
+  # MessagingService — health endpoint
+  - job_name: 'messaging-service-health'
+    metrics_path: /health
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['messaging-service:8080']
+        labels:
+          service: messaging-service
+          tier: backend
+
+  # Redis Exporter (if available)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+  # Elasticsearch health
+  - job_name: 'elasticsearch-health'
+    metrics_path: /_cluster/health
+    scrape_interval: 60s
+    params:
+      format: ['json']
+    static_configs:
+      - targets: ['elasticsearch:9200']
+        labels:
+          service: elasticsearch
+          tier: infrastructure

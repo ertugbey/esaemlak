@@ -1,0 +1,59 @@
+# ===== STAGE 1: Build all services =====
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+# Copy project files for restore
+COPY Shared.Events/Shared.Events.csproj Shared.Events/
+COPY ApiGateway/ApiGateway.csproj ApiGateway/
+COPY AuthService/AuthService.csproj AuthService/
+COPY ListingsService/ListingsService.csproj ListingsService/
+COPY NotificationService/NotificationService.csproj NotificationService/
+COPY MessagingService/MessagingService.csproj MessagingService/
+COPY PaymentService/PaymentService.csproj PaymentService/
+
+# Restore all
+RUN dotnet restore ApiGateway/ApiGateway.csproj
+RUN dotnet restore AuthService/AuthService.csproj
+RUN dotnet restore ListingsService/ListingsService.csproj
+RUN dotnet restore NotificationService/NotificationService.csproj
+RUN dotnet restore MessagingService/MessagingService.csproj
+RUN dotnet restore PaymentService/PaymentService.csproj
+
+# Copy all source
+COPY Shared.Events/ Shared.Events/
+COPY ApiGateway/ ApiGateway/
+COPY AuthService/ AuthService/
+COPY ListingsService/ ListingsService/
+COPY NotificationService/ NotificationService/
+COPY MessagingService/ MessagingService/
+COPY PaymentService/ PaymentService/
+
+# Publish each service
+RUN dotnet publish ApiGateway/ApiGateway.csproj -c Release -o /app/gateway /p:UseAppHost=false
+RUN dotnet publish AuthService/AuthService.csproj -c Release -o /app/auth /p:UseAppHost=false
+RUN dotnet publish ListingsService/ListingsService.csproj -c Release -o /app/listings /p:UseAppHost=false
+RUN dotnet publish NotificationService/NotificationService.csproj -c Release -o /app/notification /p:UseAppHost=false
+RUN dotnet publish MessagingService/MessagingService.csproj -c Release -o /app/messaging /p:UseAppHost=false
+RUN dotnet publish PaymentService/PaymentService.csproj -c Release -o /app/payment /p:UseAppHost=false
+
+# ===== STAGE 2: Runtime =====
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+WORKDIR /app
+
+# Install supervisord
+RUN apt-get update && apt-get install -y --no-install-recommends supervisor && rm -rf /var/lib/apt/lists/*
+
+# Copy published apps
+COPY --from=build /app/gateway /app/gateway
+COPY --from=build /app/auth /app/auth
+COPY --from=build /app/listings /app/listings
+COPY --from=build /app/notification /app/notification
+COPY --from=build /app/messaging /app/messaging
+COPY --from=build /app/payment /app/payment
+
+# Copy supervisord config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+EXPOSE 8080
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

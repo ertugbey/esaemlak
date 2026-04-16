@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+**/.vs/
+**/.vscode/
+**/node_modules/
+*.user
+*.suo
+.git
+README.md
+SESSION_SUMMARY.md
+*.py
+mongo-init/

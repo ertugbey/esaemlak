@@ -1,0 +1,37 @@
+{
+  "name": "turkiye-api",
+  "version": "1.0.0",
+  "description": "This REST API allows you to get data about settlements such as provinces, districts, neighborhoods and villages in Turkey. - Bu REST API Türkiye'deki iller, ilçeler, mahalleler ve köyler gibi yerleşim birimleri hakkında veri almanızı sağlar",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": [
+    "turkey",
+    "turkiye",
+    "province",
+    "city",
+    "country"
+  ],
+  "author": "Ubeyde Emir Özdemir",
+  "license": "MIT",
+  "dependencies": {
+    "apicache": "^1.6.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.0.1",
+    "morgan": "^1.10.1",
+    "pug": "^3.0.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ubeydeozdmr/turkiye-api.git"
+  }
+}
